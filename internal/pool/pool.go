@@ -313,8 +313,14 @@ func (p *Pool) Validate(a *Account) (bool, error) {
 	authz := a.Auth
 	if authz.ExpiringSoon(p.cfg.RefreshSkew) || authz.Expired() {
 		if authz.Refresh() == "" {
-			p.Disable(a.Name, "token expired and no refresh_token")
-			return false, nil
+			// 没有 refresh_token（华为云 ticket 通道不返回），不立即 disable，
+			// 只打告警日志。token 过期后上游 401 会自然 disable。
+			log.Printf("pool token account=%s expiring soon (remaining=%s) but no refresh_token, re-login required",
+				a.Name, authz.Remaining().Round(time.Minute))
+			a.mu.Lock()
+			a.lastValidated = time.Now()
+			a.mu.Unlock()
+			return true, nil
 		}
 		cfg := upstream.DefaultLoginConfig()
 		resp, err := a.Client.RefreshToken(context.Background(), cfg, authz.Refresh(), authz.Verifier())
