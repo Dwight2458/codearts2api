@@ -18,7 +18,7 @@ func (h *Handler) servePanel(w http.ResponseWriter, r *http.Request) {
 	html = strings.ReplaceAll(html, "__SERVICE_NAME__", "codearts2api")
 	html = strings.ReplaceAll(html, "__SERVICE_TITLE__", "CodeArts2API")
 	html = strings.ReplaceAll(html, "__LOGO__", "CA")
-	html = strings.ReplaceAll(html, "__ACCENT__", "#38bdf8")
+	html = strings.ReplaceAll(html, "__ACCENT__", "#0284c7")
 	// CodeArts 无积分/签到；「签到」隐藏文案改为保活相关
 	html = strings.ReplaceAll(html, ">全员签到<", ">全员保活<")
 	html = strings.ReplaceAll(html, ">拉积分<", ">刷新状态<")
