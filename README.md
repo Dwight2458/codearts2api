@@ -14,6 +14,17 @@
 | 接口 | /v1/chat/completions /v1/models | 同左 | 同左 |
 | 依赖 | Go（零三方） | Go（零三方） | Go（零三方） |
 
+## 参考项目
+
+本项目是 [Sliverkiss](https://github.com/Sliverkiss) 同系列开源项目的延伸实现，架构与运维形态参考了以下仓库：
+
+- [workbuddy2api](https://github.com/Sliverkiss/workbuddy2api) — WorkBuddy CN OpenAI 兼容反代（账号池 / 轮转 / 签到架构）
+- [traework2api](https://github.com/Sliverkiss/traework2api) — TRAE Work OpenAI 兼容反代（零依赖 Go 骨架）
+- [qoderwork2api](https://github.com/Sliverkiss/qoderwork2api) — QoderWork CN OpenAI 兼容反代（OAuth 授权流程）
+- [catpaw2api](https://github.com/HITZY2002/catpaw2api) — 本系列同作者项目（额度看门狗调度器）
+
+感谢原作者的开源与优秀设计。
+
 ## 快速开始（Ubuntu / Linux）
 
 ```bash
