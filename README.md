@@ -3,16 +3,15 @@
 > 华为云 CodeArts Agent（盘古助手/码道）的 OpenAI 兼容代理。**无需运行 CodeArts Agent
 > 客户端**，纯 Go 直连华为云 API，多账号轮转 + token 自动续期 + WebUI。
 
-## 与 workbuddy2api / traework2api / catpaw2api 同形式
+## 与 workbuddy2api / traework2api 同形式
 
-| 能力 | traework2api | catpaw2api | codearts2api |
-| --- | --- | --- | --- |
-| 上游 | TRAE SOLO 云端通道 | CatPaw 云端 HTTP | 华为云 snap-access 盘古引擎 |
-| 凭证 | auths/trae-*.json | auths/catpaw-*.json | auths/codearts-*.json |
-| 登录 | login.sh 回调链接 | login.sh 浏览器登录 | login.sh OAuth2 PKCE（回调 + ticket 轮询） |
-| 签到/续期 | 每日自动签到 | 自动领注册奖励 + 申请额度 | token 自动 refresh 续期 + 主动保活 |
-| 接口 | /v1/chat/completions /v1/models | 同左 | 同左 |
-| 依赖 | Go（零三方） | Go（零三方） | Go（零三方） |
+| 能力 | traework2api | codearts2api |
+| --- | --- | --- |
+| 上游 | TRAE SOLO 云端通道 | 华为云 snap-access 盘古引擎 |
+| 凭证 | auths/trae-*.json | auths/codearts-*.json |
+| 登录 | login.sh 回调链接 | login.sh OAuth2 PKCE（回调 + ticket 轮询） |
+| 接口 | /v1/chat/completions /v1/models | 同左 |
+| 依赖 | Go（零三方） | Go（零三方） |
 
 ## 参考项目
 
@@ -21,7 +20,6 @@
 - [workbuddy2api](https://github.com/Sliverkiss/workbuddy2api) — WorkBuddy CN OpenAI 兼容反代（账号池 / 轮转 / 签到架构）
 - [traework2api](https://github.com/Sliverkiss/traework2api) — TRAE Work OpenAI 兼容反代（零依赖 Go 骨架）
 - [qoderwork2api](https://github.com/Sliverkiss/qoderwork2api) — QoderWork CN OpenAI 兼容反代（OAuth 授权流程）
-- [catpaw2api](https://github.com/HITZY2002/catpaw2api) — 本系列同作者项目（额度看门狗调度器）
 
 感谢原作者的开源与优秀设计。
 
@@ -62,41 +60,8 @@ curl -X POST http://127.0.0.1:7866/v1/chat/completions \
   -d '{"model":"snap-chat","messages":[{"role":"user","content":"你好"}]}'
 ```
 
-浏览器打开 **http://127.0.0.1:7866/** 即 WebUI：账号/token 状态、续期调度配置、
-对话测试（流式/非流式）。多轮上下文按账号自动续接（chat_id 分组）；也可用请求头
+浏览器打开 **http://127.0.0.1:7866/** 即 WebUI：账号/token 状态、对话测试（流式/非流式）。多轮上下文按账号自动续接（chat_id 分组）；也可用请求头
 `X-Codearts-Chat-Id: <chatId>` 或 body 里 `conversation_id` 显式指定会话。
-
-## Token 续期与保活（对应自动签到）
-
-CodeArts Agent 没有每日签到，也没有「申请额度」按钮——免费额度按月重置
-（[个人用量](https://codearts.huaweicloud.com/portal/settings/personal-usage)）。
-
-本项目的**增强版自动续期调度器**：
-- **主动保活**：定期发送轻量级请求保持会话活跃，防止因长时间闲置导致失效
-- **积极刷新策略**：token 剩余少于 1 小时即主动刷新，而非被动等待
-- **并发控制**：单账号最大并发数限制（默认 5），避免触发上游并发会话上限错误
-
-```json
-{ 
-  "watch": { 
-    "enabled": true, 
-    "poll_minutes": 30, 
-    "refresh_skew_minutes": 30,
-    "keepalive_interval_minutes": 15   // 保活心跳间隔（新增）
-  },
-  "max_concurrent": 5,                  // 单账号最大并发数（新增）
-  "keepalive_window": "10m"             // 保活窗口，超过此时间无活动则发送心跳（新增）
-}
-```
-
-手动工具：
-
-```bash
-./bin/codearts2api-credit               # 账号登录态日报（token 剩余/过期时间/并发数）
-./bin/codearts2api-credit -json
-./bin/codearts2api-apply                # 批量刷新临期/过期 token
-./bin/codearts2api-apply -force         # 强制刷新所有 token
-```
 
 ## 并发控制优化
 
