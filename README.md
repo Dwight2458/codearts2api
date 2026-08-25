@@ -3,16 +3,6 @@
 > 华为云 CodeArts Agent（盘古助手/码道）的 OpenAI 兼容代理。**无需运行 CodeArts Agent
 > 客户端**，纯 Go 直连华为云 API，多账号轮转 + token 自动续期 + WebUI。
 
-## 与 workbuddy2api / traework2api 同形式
-
-| 能力 | traework2api | codearts2api |
-| --- | --- | --- |
-| 上游 | TRAE SOLO 云端通道 | 华为云 snap-access 盘古引擎 |
-| 凭证 | auths/trae-*.json | auths/codearts-*.json |
-| 登录 | login.sh 回调链接 | login.sh OAuth2 PKCE（回调 + ticket 轮询） |
-| 接口 | /v1/chat/completions /v1/models | 同左 |
-| 依赖 | Go（零三方） | Go（零三方） |
-
 ## 参考项目
 
 本项目是 [Sliverkiss](https://github.com/Sliverkiss) 同系列开源项目的延伸实现，架构与运维形态参考了以下仓库：
@@ -62,30 +52,6 @@ curl -X POST http://127.0.0.1:7866/v1/chat/completions \
 
 浏览器打开 **http://127.0.0.1:7866/** 即 WebUI：账号/token 状态、对话测试（流式/非流式）。多轮上下文按账号自动续接（chat_id 分组）；也可用请求头
 `X-Codearts-Chat-Id: <chatId>` 或 body 里 `conversation_id` 显式指定会话。
-
-## 并发控制优化
-
-为解决**会话并发限制**问题，本项目实现了：
-
-1. **Per-Account 并发计数器**：跟踪每个账号的活跃请求数
-2. **智能降级策略**：超过限流时快速切换到其他账号，不阻塞请求
-3. **可配置参数**：通过 `max_concurrent` 调整单账号最大并发数
-
-当遇到上游并发超限错误（`tm.00001041`）时，系统会：
-- 将该账号暂时软冷却（默认 60 秒）
-- 立即尝试下一个健康账号
-- 记录日志便于排查
-
-## 逆向依据（详见 docs/reverse-engineering.md）
-
-- 聊天：`POST https://snap-access.cn-north-4.myhuaweicloud.com/v1/chat/chat`
-  **AK/SK `SDK-HMAC-SHA256` 签名**（不是 x-auth-token），SSE 逐行 `data:` JSON
-- 登录：`https://codearts.huaweicloud.com/authorize`（OAuth2 PKCE）→ 本地回调 →
-  `sts.cn-north-4.myhuaweicloud.com/v1/oauth2/tokens`（DPoP 签名）换 STS 临时
-  AK/SK + security_token + refresh_token；兜底通道
-  `snap-manager/v1/login/ticket?ticket_id=&secret=` 轮询
-- 刷新：`POST sts.cn-north-4.myhuaweicloud.com/v1/oauth2/tokens` `grant_type=refresh_token`
-- messages 格式：`[{type:"text",text}]`（无 role）；chat_id 为 32 位 hex
 
 ## 部署（systemd / Docker）
 
