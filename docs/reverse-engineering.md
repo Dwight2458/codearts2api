@@ -101,6 +101,39 @@ Body：
 - 因此本项目用「token 自动 refresh 续期」作为对应自动签到的能力，
   并保留 `credit.sh`/`apply.sh` 运维脚本。
 
-## 7. 脱敏
+## 7. 限时福利模型（免费套餐，2026-09-06 逆向自 CodeArtsSpace 0.1.18）
+
+> 该节由 PR #2（@threegod3）的逆向结论整理而来。
+
+官方客户端可用模型 = 内置 + 限时福利两路合并（`ModelService.listBuiltinModels` + `getFreeBenefitModels`）：
+
+- 福利发现：`GET https://opengw.developer.huaweicloud.com/api/v1/gateway/config`
+  （AK/SK 签名 + `X-Security-Token`，无 Agent-Type），返回
+  `{error_code:"0000", result:{base_url, models:[{model_id, model_name, context_window, max_tokens}]}}`。
+  实测模型 ID 全小写：`deepseek-v4-flash-0731`、`deepseek-v4-pro-0813`、`glm-5.3-flash`。
+- 领取/余额（幂等，官方客户端打开模型菜单即调用）：
+  `POST /api/v1/benefit/claim {}`、`GET /api/v1/user/tokens/balance`（同 host 同签名）。
+- 网关总开关：`GET {snap}/v1/benefit-gateway-config`（`Agent-Type: PromptCenter`）→ `{enabled}`。
+- 聊天路由：**同一** `POST {snap}/api/v2/chat/completions`，福利模型需追加请求头
+  `maas_type: benefit`（renderer 检测 `isFreeBenefit` 添加，经 kernel `KERNEL_LLM_FORWARD_HEADERS`
+  转发）。无此头报 `InferHub.002002009.404 model is not registered`；有头正常流式。
+- agent 选择：`useragents?offset=0&limit=100&is_primary_agent=true` 后取
+  `agent_name=="CodeAgent" && alias.alias_zh_cn=="智能体" && show_in_ide`（退化 primary/首个）。
+- 内置补充接口：`GET {snap}/v1/model/builtin`（`Agent-Type: PromptCenter`）→ `{builtinModels:[...]}`。
+- 模型 ID 区分大小写；福利网关返回小写，`CanonicalModel` 做大小写不敏感归一。
+
+### 本仓库的实现取舍
+
+- **福利目录按账号存放**（`internal/upstream/models.go`）：福利是按账号授予的，
+  池里 A 账号有、B 账号没有时，判定依据必须是**发起请求的那个账号**，不能全局共享；
+  目录**整体替换**而非增补，套餐轮换后不留旧标记。
+- **`maas_type` 由服务端注入并计入签名**：`SendChatV2` 在 `signRequest` 之前设置该头，
+  SignedHeaders 覆盖它（与官方客户端行为一致）。
+- **领取默认关闭**：`POST benefit/claim` 是对账号的写操作，而 `/v1/models` 是可被任意
+  持 key 客户端调用的读接口，因此默认只读不领取；需要领取时显式执行
+  `go run ./cmd/models -claim` 或打开 `benefit_auto_claim`。
+- 冷启动种子（`seedBenefitModels`）：首次发现前也要带福利头，少带一次就是一次 404。
+
+## 8. 脱敏
 
 本仓库不包含任何真实 token。`auths/`、`data/`、`config.json`、`.env` 均 gitignore。
