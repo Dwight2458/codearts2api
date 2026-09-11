@@ -390,6 +390,48 @@ func (h *Handler) fetchDynamicModels() []upstream.ModelInfo {
 	return infos
 }
 
+// pickAccount 挑一个「目录里登记了这个模型」的健康账号，没有则退回普通轮转。
+//
+// 混合账号池里各账号的套餐不同：/v1/models 展示的是并集，若把请求先发给目录里
+// 没有该模型的账号，上游会按「未注册模型」报 400，既浪费一次轮转（MaxRotate 只有
+// 3 次，池子超过 3 个账号时可能永远轮不到有能力的那台），又会给健康账号记错误、
+// 累计到阈值就冷却 10 分钟。所以按能力优先挑号。
+func (h *Handler) pickAccount(tried map[string]bool, model string) *pool.Account {
+	want := strings.ToLower(upstream.CanonicalModel(model))
+	for _, acct := range h.cfg.Pool.Accounts() {
+		if acct == nil || tried[acct.Name] || !h.cfg.Pool.Healthy(acct.Name) {
+			continue
+		}
+		if models, known := upstream.AccountModels(acct.UID); known && catalogHas(models, want) {
+			return acct
+		}
+	}
+	return h.cfg.Pool.PickExcluding(tried)
+}
+
+// accountCanServe 报告账号目录里是否登记了该模型；账号不存在或目录未知时乐观放行
+// （交给上游判定，不凭缺失的目录拒请求）。
+func (h *Handler) accountCanServe(acct *pool.Account, model string) bool {
+	if acct == nil {
+		return true
+	}
+	models, known := upstream.AccountModels(acct.UID)
+	if !known {
+		return true
+	}
+	return catalogHas(models, strings.ToLower(upstream.CanonicalModel(model)))
+}
+
+// catalogHas 按小写 ID 在模型目录里查模型。
+func catalogHas(models []upstream.ModelInfo, wantLower string) bool {
+	for _, mi := range models {
+		if strings.ToLower(mi.ID) == wantLower {
+			return true
+		}
+	}
+	return false
+}
+
 // ---------------------------------------------------------------------------
 // chat
 // ---------------------------------------------------------------------------
@@ -438,17 +480,17 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < h.cfg.MaxRotate; i++ {
 		var acct *pool.Account
 		if stickyAcct != "" {
-			// 续接会话：锁定原账号（若仍健康）。
+			// 续接会话：锁定原账号（仍健康且目录里有这个模型）。
 			acct = h.cfg.Pool.Get(stickyAcct)
-			if acct == nil || !h.cfg.Pool.Healthy(stickyAcct) {
+			if acct == nil || !h.cfg.Pool.Healthy(stickyAcct) || !h.accountCanServe(acct, model) {
 				stickyAcct = ""
-				acct = h.cfg.Pool.PickExcluding(tried)
+				acct = h.pickAccount(tried, model)
 			} else {
 				tried[acct.Name] = true
 			}
 		}
 		if acct == nil {
-			acct = h.cfg.Pool.PickExcluding(tried)
+			acct = h.pickAccount(tried, model)
 		}
 		if acct == nil {
 			break

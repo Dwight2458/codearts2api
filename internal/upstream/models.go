@@ -72,7 +72,8 @@ var seedBenefit = func() map[string]bool {
 // accountCatalog 一个账号的模型目录快照。
 type accountCatalog struct {
 	infos   []ModelInfo
-	benefit map[string]bool // lower(id) -> true
+	benefit map[string]bool // lower(id) -> true（福利来源确认）
+	knows   map[string]bool // lower(id) -> true（该账号目录里登记过的全部模型）
 	fetched time.Time
 }
 
@@ -99,6 +100,7 @@ func SetAccountModels(accountID string, infos []ModelInfo) {
 	ac := &accountCatalog{
 		infos:   append([]ModelInfo(nil), infos...),
 		benefit: make(map[string]bool),
+		knows:   make(map[string]bool),
 		fetched: time.Now(),
 	}
 	catalog.Lock()
@@ -111,6 +113,7 @@ func SetAccountModels(accountID string, infos []ModelInfo) {
 			continue
 		}
 		key := strings.ToLower(mi.ID)
+		ac.knows[key] = true
 		if mi.Benefit {
 			ac.benefit[key] = true
 		}
@@ -142,20 +145,28 @@ func AccountCatalogStale(accountID string) bool {
 
 // IsBenefitModel 报告该账号下该模型是否走限时福利路由（大小写不敏感）。
 //
-// 种子命中恒为 true：账号目录尚未发现（或发现时福利接口临时失败）时也必须带头，
-// 否则上游按「未注册模型」拒绝。账号目录已发现时，以该账号自己的目录为准。
+// 判定顺序：
+//  1. 该账号目录里标了福利 → true（发现结果优先于种子）
+//  2. 该账号目录里有但没有标福利 → false：它已经以内置/agent-center 身份注册，
+//     套餐轮换后福利模型转正就靠这条摘掉 maas_type 头
+//  3. 目录里没有这个模型（尚未发现、福利来源失败或未领取）→ 回退冷启动种子，
+//     少带一次头就是一次 InferHub.002002009.404，宁可多带
 func IsBenefitModel(accountID, model string) bool {
 	key := strings.ToLower(strings.TrimSpace(model))
 	if key == "" {
 		return false
 	}
-	if seedBenefit[key] {
-		return true
-	}
 	catalog.RLock()
 	defer catalog.RUnlock()
-	ac, ok := catalog.accounts[accountID]
-	return ok && ac.benefit[key]
+	if ac, ok := catalog.accounts[accountID]; ok {
+		if ac.benefit[key] {
+			return true
+		}
+		if ac.knows[key] {
+			return false
+		}
+	}
+	return seedBenefit[key]
 }
 
 // lookupKnownModel 按小写 ID 查精确模型 ID（种子 + 已发现模型）。

@@ -77,6 +77,30 @@ func TestSetAccountModelsReplacesCatalog(t *testing.T) {
 	}
 }
 
+// 福利模型转正（或套餐变化）后，发现结果必须压过冷启动种子，否则会一直带错头。
+func TestDiscoveredCatalogOverridesSeed(t *testing.T) {
+	// glm-5.3-flash 在种子里是福利模型，但该账号发现到的是内置模型。
+	SetAccountModels("acct-promoted", []ModelInfo{
+		{ID: "glm-5.3-flash", ContextWindow: 131072},
+		{ID: "GLM-5.2", ContextWindow: 202752},
+	})
+	if IsBenefitModel("acct-promoted", "GLM-5.3-flash") {
+		t.Error("发现结果说它是内置模型时不得再走福利路由")
+	}
+	if IsBenefitModel("acct-promoted", "GLM-5.2") {
+		t.Error("内置模型不应走福利路由")
+	}
+	// 目录里查不到的种子模型（福利来源失败/未领取）仍要带头，否则上游按未注册模型拒。
+	if !IsBenefitModel("acct-promoted", "deepseek-v4-pro-0813") {
+		t.Error("目录里没有的种子模型应回退种子判定")
+	}
+	// 目录明确标了福利 → 优先级最高。
+	SetAccountModels("acct-promoted2", []ModelInfo{{ID: "glm-5.3-flash", Benefit: true}})
+	if !IsBenefitModel("acct-promoted2", "GLM-5.3-FLASH") {
+		t.Error("目录标了福利就应走福利路由（大小写不敏感）")
+	}
+}
+
 func TestMergeModelsBenefitAndDeterminism(t *testing.T) {
 	agent := []ModelInfo{{ID: "deepseek-v4-pro-0813", ContextWindow: 1048576}}
 	builtin := []ModelInfo{
