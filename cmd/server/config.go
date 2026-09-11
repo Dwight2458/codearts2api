@@ -38,6 +38,10 @@ type Config struct {
 	MaxConcurrent   int `json:"max_concurrent"`   // 单账号最大并发数（新增）
 	KeepaliveWindow string `json:"keepalive_window"` // 保活窗口（新增）
 
+	// BenefitAutoClaim 模型发现时自动领取限时福利（默认 false）。
+	// 领取是对账号的写操作，且 /v1/models 是公开读接口，默认只读不写。
+	BenefitAutoClaim bool `json:"benefit_auto_claim"`
+
 	Upstream struct {
 		TimeoutSeconds int `json:"timeout_seconds"`
 	} `json:"upstream"`
@@ -188,6 +192,9 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("CA2A_KEEPALIVE_WINDOW"); v != "" {
 		c.KeepaliveWindow = v
+	}
+	if v := os.Getenv("CA2A_BENEFIT_AUTO_CLAIM"); v != "" {
+		c.BenefitAutoClaim = v == "1" || strings.EqualFold(v, "true")
 	}
 }
 
