@@ -76,7 +76,7 @@ func Load(path string) (*Config, error) {
 			if !os.IsNotExist(err) {
 				return nil, fmt.Errorf("read config: %w", err)
 			}
-		} else if err := json.Unmarshal(raw, c); err != nil {
+		} else if err := json.Unmarshal(stripJSONComments(raw), c); err != nil {
 			return nil, fmt.Errorf("parse config: %w", err)
 		}
 	}
@@ -88,6 +88,60 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// stripJSONComments 去掉配置里的 // 与 /* */ 注释。
+//
+// config.example.json 带注释（字段说明只在那一份里），README 又让人直接
+// `cp config.example.json config.json`；标准 encoding/json 不接受注释，
+// 因此这里先做一次剥离。字符串内的 // 与 /* 本身不动（oauth_callback_host
+// 这类值就是 URL）。
+func stripJSONComments(raw []byte) []byte {
+	out := make([]byte, 0, len(raw))
+	inString := false
+	for i := 0; i < len(raw); i++ {
+		ch := raw[i]
+		if inString {
+			out = append(out, ch)
+			switch ch {
+			case '\\':
+				if i+1 < len(raw) {
+					i++
+					out = append(out, raw[i])
+				}
+			case '"':
+				inString = false
+			}
+			continue
+		}
+		if ch == '"' {
+			inString = true
+			out = append(out, ch)
+			continue
+		}
+		if ch == '/' && i+1 < len(raw) {
+			if raw[i+1] == '/' {
+				for i < len(raw) && raw[i] != '\n' {
+					i++
+				}
+				// 保留换行，尽量不改变 offset。
+				if i < len(raw) {
+					out = append(out, '\n')
+				}
+				continue
+			}
+			if raw[i+1] == '*' {
+				i += 2
+				for i+1 < len(raw) && !(raw[i] == '*' && raw[i+1] == '/') {
+					i++
+				}
+				i++ // 跳过结尾的 '/'
+				continue
+			}
+		}
+		out = append(out, ch)
+	}
+	return out
 }
 
 func applyEnv(c *Config) {
