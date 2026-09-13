@@ -14,7 +14,7 @@ import (
 // Config 顶层配置。
 type Config struct {
 	Listen       string `json:"listen"`
-	APIKey       string `json:"api_key"` // 只读 env CA2A_API_KEY
+	APIKey       string `json:"api_key"` // config.json 的 api_key 或 env CA2A_API_KEY（同时存在时 env 优先）
 	AuthDir      string `json:"auth_dir"`
 	StateFile    string `json:"state_file"`
 	DefaultModel string `json:"default_model"`
