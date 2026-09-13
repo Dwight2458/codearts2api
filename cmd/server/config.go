@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -87,6 +88,8 @@ func Load(path string) (*Config, error) {
 	applyEnv(c)
 	if c.APIKey == "" {
 		c.APIKey = "dummy-key-for-codearts"
+		log.Printf("WARNING: 未设置 CA2A_API_KEY（config.json 的 api_key 与 env 均为空），"+
+			"正在使用公开默认 key %s，切勿对外暴露端口", c.APIKey)
 	}
 	if err := c.normalize(); err != nil {
 		return nil, err
